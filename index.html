@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="description" content="Jogo de plataforma 2D contínuo com checkpoints interativos, cenário procedural e arquitetura modular.">
+  <meta name="theme-color" content="#0F172A">
+  <title>Plataforma 2D — Jogo de Aventura</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="gameContainer">
+    <!-- Loading -->
+    <div id="loadingOverlay">
+      <div class="loading-spinner"></div>
+      <p>Carregando...</p>
+    </div>
+
+    <!-- Canvas principal -->
+    <canvas id="gameCanvas" width="100%" height="100%"></canvas>
+
+    <!-- Info rodapé -->
+    <p id="gameInfo">← → ou A/D para mover · ESPAÇO ou W para pular · Alcance os checkpoints!</p>
+
+    <!-- Controles mobile -->
+    <div id="mobileControls">
+      <div class="ctrl-group">
+        <button id="btnLeft" class="ctrl-btn" aria-label="Mover esquerda">◀</button>
+        <button id="btnRight" class="ctrl-btn" aria-label="Mover direita">▶</button>
+      </div>
+      <div class="ctrl-group">
+        <button id="btnJump" class="ctrl-btn ctrl-btn-jump" aria-label="Pular">PULO</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { init } from './game.js';
+
+    // Esconder loading quando o jogo iniciar
+    window.addEventListener('DOMContentLoaded', () => {
+      const overlay = document.getElementById('loadingOverlay');
+      // O game.js já chama init() via DOMContentLoaded
+      // Esconder overlay após um breve delay
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+      }, 500);
+    });
+  </script>
+</body>
+</html>
