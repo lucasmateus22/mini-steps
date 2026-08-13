@@ -84,6 +84,30 @@ export default class AudioSystem {
     });
   }
 
+  playCollect() {
+    if (!this.initialized || !this.ctx) return;
+
+    // Dois tons agudos e brilhantes (arpejo estilo moeda/item raro)
+    const notes = [659.25, 987.77]; // E5, B5
+    notes.forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gainNode = this.ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.07);
+
+      gainNode.gain.setValueAtTime(0, this.ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.08, this.ctx.currentTime + i * 0.07);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.07 + 0.15);
+
+      osc.connect(gainNode);
+      gainNode.connect(this.ctx.destination);
+
+      osc.start(this.ctx.currentTime + i * 0.07);
+      osc.stop(this.ctx.currentTime + i * 0.07 + 0.16);
+    });
+  }
+
   playVictory() {
     if (!this.initialized || !this.ctx) return;
     

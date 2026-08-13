@@ -5,8 +5,8 @@
 
 const characterConfig = {
   // --- Pele ---
-  skinColor: "#3D2314", // Negro
-  skinHighlight: "#5C3A28", // Highlight sutil
+  skinColor: "#5C3A28",
+  skinHighlight: "#5C3A28",
 
   // --- Cabelo ---
   hairStyle: "bald", // careca

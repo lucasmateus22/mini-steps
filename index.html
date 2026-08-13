@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="description" content="Jogo de plataforma 2D contínuo com checkpoints interativos, cenário procedural e arquitetura modular.">
   <meta name="theme-color" content="#0F172A">
+
+  <!-- Segurança: Content Security Policy -->
+  <!-- Nota: frame-ancestors só funciona como HTTP header, não em meta tags -->
+  <meta http-equiv="Content-Security-Policy" 
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta name="referrer" content="no-referrer">
+
   <title>Plataforma 2D — Jogo de Aventura</title>
   <link rel="stylesheet" href="css/style.css">
 </head>

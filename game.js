@@ -1,9 +1,10 @@
 // ============================================================
 // game.js — Game loop principal
 // Orquestra todos os sistemas, entidades e o mundo.
+// Anti-tamper integrado para proteção contra manipulação.
 // ============================================================
 
-import { CANVAS, WORLD } from "./config/gameMetrics.js";
+import { CANVAS, WORLD, CHECKPOINT } from "./config/gameMetrics.js";
 import {
   getRandomDeathMessage,
   startMessage,
@@ -18,18 +19,23 @@ import CheckpointSequence from "./systems/checkpointSequence.js";
 import DialogBox from "./systems/dialogBox.js";
 import HudSystem from "./systems/hud.js";
 import AudioSystem from "./systems/audio.js";
+import AntiTamper from "./systems/antiTamper.js";
 
 // ============================
-// Estado Global
+// Estado Global (encapsulado no módulo — não vaza para window)
 // ============================
 let canvas, ctx;
 let player, camera, worldGen, worldData;
 let checkpointSeq, dialogBox, hud, audioSystem;
+let antiTamper;
 
 let input = { left: false, right: false, jump: false };
 let gameState = "title"; // title | playing | dead | victory
 let activatedCheckpoints = 0;
+let collectedDocsCount = 0;
 let lastTimestamp = 0;
+let tamperDetected = false;
+let tamperReason = "";
 
 // ============================
 // Inicialização
@@ -40,6 +46,18 @@ export function init() {
   
   window.addEventListener("resize", resizeCanvas);
   resizeCanvas();
+
+  // --- Anti-Tamper ---
+  const container = document.getElementById("gameContainer");
+  antiTamper = new AntiTamper();
+  antiTamper.init(container, (reason) => {
+    tamperDetected = true;
+    tamperReason = reason;
+    // Pausar o jogo ao detectar tampering
+    if (gameState === "playing") {
+      gameState = "tamper";
+    }
+  });
 
   audioSystem = new AudioSystem();
 
@@ -60,7 +78,10 @@ export function init() {
 
   // Reset
   activatedCheckpoints = 0;
+  collectedDocsCount = 0;
   gameState = "title";
+  tamperDetected = false;
+  tamperReason = "";
 
   // Mostrar mensagem inicial
   dialogBox.show(startMessage, 3000, () => {
@@ -145,6 +166,13 @@ function loop(timestamp) {
   const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05); // cap at 50ms
   lastTimestamp = timestamp;
 
+  // Validar integridade do timing
+  if (antiTamper && !antiTamper.validateTiming(dt, timestamp)) {
+    // Timing manipulado — ignorar frame
+    requestAnimationFrame(loop);
+    return;
+  }
+
   update(dt);
   render();
 
@@ -162,6 +190,7 @@ function update(dt) {
   if (gameState === "title") return;
   if (gameState === "victory") return;
   if (gameState === "dead") return;
+  if (gameState === "tamper") return; // Pausado por tampering
 
   // --- Playing ---
 
@@ -171,6 +200,7 @@ function update(dt) {
     worldData.startFlag.update(dt);
     worldData.endFlag.update(dt);
     for (const obs of worldData.obstacles) obs.update(dt);
+    for (const doc of worldData.documents) doc.update(dt);
     camera.follow(player, dt);
     checkpointSeq.update(dt);
     return;
@@ -201,6 +231,13 @@ function update(dt) {
       handlePlayerDeath();
       return;
     }
+  }
+
+  // Colisão com documentos / pequenos papéis colecionáveis
+  const hitDocs = CollisionSystem.checkPlayerDocuments(player, worldData.documents);
+  if (hitDocs.length > 0) {
+    collectedDocsCount += hitDocs.length;
+    if (audioSystem) audioSystem.playCollect();
   }
 
   // Queda no vazio
@@ -234,13 +271,19 @@ function update(dt) {
 
   // Bandeira final
   if (CollisionSystem.checkEndFlag(player, worldData.endFlag)) {
+    // Validar integridade do score antes de aceitar vitória
+    if (antiTamper) {
+      const score = activatedCheckpoints * CHECKPOINT.SCORE_PER_CHECKPOINT + collectedDocsCount * 100;
+      antiTamper.validateScore(score, activatedCheckpoints, CHECKPOINT.SCORE_PER_CHECKPOINT, collectedDocsCount);
+    }
     handleVictory();
   }
 
-  // Update do mundo (bandeiras + obstáculos com animação de água)
+  // Update do mundo (bandeiras + obstáculos + documentos)
   worldData.startFlag.update(dt);
   worldData.endFlag.update(dt);
   for (const obs of worldData.obstacles) obs.update(dt);
+  for (const doc of worldData.documents) doc.update(dt);
 
   // Câmera segue player
   camera.follow(player, dt);
@@ -278,6 +321,7 @@ function fullRestart() {
   player = new Player();
   checkpointSeq = new CheckpointSequence(dialogBox);
   activatedCheckpoints = 0;
+  collectedDocsCount = 0;
   gameState = "playing";
   camera.x = 0;
   camera.y = 0;
@@ -309,12 +353,19 @@ function render() {
     }
   }
 
-  // --- Casas ---
+  // --- Casas e Cartórios ---
   for (const house of worldData.houses) {
     if (
-      camera.isVisible(house.x, house.y, house.width + 20, house.height + 40)
+      camera.isVisible(house.x - 20, house.y - 20, house.width + 40, house.height + 40)
     ) {
       house.render(ctx, camera);
+    }
+  }
+
+  // --- Pequenos Papéis / Certidões Colecionáveis ---
+  for (const doc of worldData.documents) {
+    if (camera.isVisible(doc.x - 10, doc.y - 20, doc.width + 20, doc.height + 40)) {
+      doc.render(ctx, camera);
     }
   }
 
@@ -344,6 +395,8 @@ function render() {
     player,
     worldData.checkpointHouses.length,
     activatedCheckpoints,
+    collectedDocsCount,
+    worldData.documents.length,
   );
 
   // --- Dialog Box ---
@@ -355,6 +408,9 @@ function render() {
   }
   if (gameState === "victory") {
     renderVictoryOverlay();
+  }
+  if (gameState === "tamper") {
+    renderTamperOverlay();
   }
 }
 
@@ -455,6 +511,35 @@ function renderVictoryOverlay() {
     "ENTER para jogar novamente",
     CANVAS.WIDTH / 2,
     CANVAS.HEIGHT / 2 + 50,
+  );
+}
+
+// ============================
+// Overlay de Tampering Detectado
+// ============================
+function renderTamperOverlay() {
+  ctx.fillStyle = "rgba(15, 0, 0, 0.85)";
+  ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
+
+  ctx.fillStyle = "#EF4444";
+  ctx.font = `bold 22px "Press Start 2P", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText("⚠ MANIPULAÇÃO DETECTADA", CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2 - 30);
+
+  ctx.fillStyle = "#F87171";
+  ctx.font = `12px "Press Start 2P", monospace`;
+  ctx.fillText(
+    "O jogo detectou uma tentativa de manipulação.",
+    CANVAS.WIDTH / 2,
+    CANVAS.HEIGHT / 2 + 10
+  );
+
+  ctx.fillStyle = "#D1D5DB";
+  ctx.font = `10px "Press Start 2P", monospace`;
+  ctx.fillText(
+    "Feche o DevTools e recarregue a página para continuar.",
+    CANVAS.WIDTH / 2,
+    CANVAS.HEIGHT / 2 + 40
   );
 }
 

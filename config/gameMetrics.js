@@ -51,6 +51,9 @@ export const CHECKPOINT = {
   DIALOG_DURATION: 2500,
   DOOR_REOPEN_DURATION: 600,
   EXIT_DURATION: 500,
+  // Imagens do checkpoint (podem ser customizadas pelo usuário)
+  IMAGE_INACTIVE_SRC: "assets/checkpoint_inactive.jpg",
+  IMAGE_ACTIVE_SRC: "assets/checkpoint_active.png",
 };
 
 export const FLAG = {

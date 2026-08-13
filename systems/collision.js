@@ -109,6 +109,26 @@ export default class CollisionSystem {
   }
 
   /**
+   * Verifica colisão do player com documentos/papéis colecionáveis.
+   * Retorna lista de documentos coletados nesta iteração.
+   */
+  static checkPlayerDocuments(player, documents) {
+    const pb = player.getBounds();
+    const collected = [];
+
+    for (const doc of documents) {
+      if (!doc.active || doc.collected) continue;
+      if (this.testAABB(pb, doc.getBounds())) {
+        if (doc.collect()) {
+          collected.push(doc);
+        }
+      }
+    }
+
+    return collected;
+  }
+
+  /**
    * Verifica se o player caiu no vazio (abaixo do chão).
    */
   static checkFallOff(player, groundY) {

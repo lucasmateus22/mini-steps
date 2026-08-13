@@ -20,9 +20,9 @@ export default class HudSystem {
     this.scoreAnimTimer = 0;
 
     // Duração de cada fase (em segundos)
-    this.goingDuration = 0.4;    // Indo pro centro
-    this.holdDuration = 0.8;     // Parado no centro
-    this.returnDuration = 0.35;  // Voltando à origem
+    this.goingDuration = 0.4; // Indo pro centro
+    this.holdDuration = 0.8; // Parado no centro
+    this.returnDuration = 0.35; // Voltando à origem
 
     // Posição animada do painel
     this.panelX = 0;
@@ -110,7 +110,10 @@ export default class HudSystem {
           this.scoreAnimState = "at_center";
           this.scoreAnimTimer = 0;
           // Explosão de partículas no centro!
-          this._spawnCenterParticles(centerX + clockW / 2, centerY + clockH / 2);
+          this._spawnCenterParticles(
+            centerX + clockW / 2,
+            centerY + clockH / 2,
+          );
         }
         break;
       }
@@ -151,7 +154,15 @@ export default class HudSystem {
    * Cria partículas de celebração no centro da tela.
    */
   _spawnCenterParticles(cx, cy) {
-    const colors = ["#FBBF24", "#10B981", "#F97316", "#38BDF8", "#EF4444", "#A855F7", "#FFFFFF"];
+    const colors = [
+      "#FBBF24",
+      "#10B981",
+      "#F97316",
+      "#38BDF8",
+      "#EF4444",
+      "#A855F7",
+      "#FFFFFF",
+    ];
     for (let i = 0; i < 60; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 150 + Math.random() * 350;
@@ -171,15 +182,24 @@ export default class HudSystem {
    * @param {import('../entities/player.js').default} player
    * @param {number} totalCheckpoints
    * @param {number} activatedCount
+   * @param {number} [collectedDocs=0]
+   * @param {number} [totalDocs=0]
    */
-  render(ctx, player, totalCheckpoints, activatedCount) {
+  render(
+    ctx,
+    player,
+    totalCheckpoints,
+    activatedCount,
+    collectedDocs = 0,
+    totalDocs = 0,
+  ) {
     const pad = HUD.PADDING;
 
     ctx.save();
 
     // --- Score Panel (Digital Clock) ---
     const scoreVal = activatedCount * CHECKPOINT.SCORE_PER_CHECKPOINT;
-    const scoreStr = scoreVal.toString().padStart(6, '0');
+    const scoreStr = scoreVal.toString().padStart(6, "0");
 
     const clockW = 120;
     const clockH = 28;
@@ -244,7 +264,7 @@ export default class HudSystem {
     ctx.font = `bold 10px ${HUD.FONT_FAMILY}`;
     ctx.textAlign = "center";
     ctx.fillText(`PTS ${scoreStr}`, clockW / 2, 19);
-    
+
     // Reseta sombra
     ctx.shadowBlur = 0;
 
@@ -304,19 +324,37 @@ export default class HudSystem {
       barY + barHeight - 3,
     );
 
-    // --- Checkpoint counter ---
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    // --- Checkpoint counter & Document counter (lado a lado ou empilhados) ---
+    const subW = (barWidth - 6) / 2;
+
+    // 1) Checkpoint Counter
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.beginPath();
-    ctx.roundRect(barX, barY + barHeight + 6, barWidth, 18, 5);
+    ctx.roundRect(barX, barY + barHeight + 6, subW, 20, 5);
     ctx.fill();
 
     ctx.fillStyle = "#FBBF24";
-    ctx.font = `bold ${HUD.FONT_SIZE}px ${HUD.FONT_FAMILY}`;
+    ctx.font = `bold 10px ${HUD.FONT_FAMILY}`;
     ctx.textAlign = "center";
     ctx.fillText(
-      `⚑ ${activatedCount} / ${totalCheckpoints}`,
-      barX + barWidth / 2,
-      barY + barHeight + 18,
+      `⚑ ${activatedCount}/${totalCheckpoints}`,
+      barX + subW / 2,
+      barY + barHeight + 20,
+    );
+
+    // 2) Document Counter (Papéis de Cartório / Certidões)
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.beginPath();
+    ctx.roundRect(barX + subW + 6, barY + barHeight + 6, subW, 20, 5);
+    ctx.fill();
+
+    ctx.fillStyle = "#60A5FA";
+    ctx.font = `bold 10px ${HUD.FONT_FAMILY}`;
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `📜 ${collectedDocs}/${totalDocs}`,
+      barX + subW + 6 + subW / 2,
+      barY + barHeight + 20,
     );
 
     // --- Checkpoint flash text ---
