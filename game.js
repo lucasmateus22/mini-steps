@@ -83,11 +83,6 @@ export function init() {
   tamperDetected = false;
   tamperReason = "";
 
-  // Mostrar mensagem inicial
-  dialogBox.show(startMessage, 3000, () => {
-    gameState = "playing";
-  });
-
   // Input
   setupInput();
 
@@ -105,9 +100,33 @@ function resizeCanvas() {
 }
 
 // ============================
+// Controle de Início / Reinício
+// ============================
+function startGame() {
+  if (gameState !== "title") return;
+  if (audioSystem) audioSystem.init();
+  gameState = "playing";
+  if (canvas) canvas.style.cursor = "default";
+  // Exibe mensagem de boas-vindas com o jogo já ativo
+  dialogBox.show(startMessage, 3500);
+}
+
+// ============================
 // Input
 // ============================
 function setupInput() {
+  const handleStartOrRestart = () => {
+    if (gameState === "title") {
+      startGame();
+      return true;
+    }
+    if (gameState === "victory") {
+      fullRestart();
+      return true;
+    }
+    return false;
+  };
+
   window.addEventListener("keydown", (e) => {
     if (e.code === "ArrowLeft" || e.code === "KeyA") input.left = true;
     if (e.code === "ArrowRight" || e.code === "KeyD") input.right = true;
@@ -116,14 +135,11 @@ function setupInput() {
       input.jump = true;
     }
 
-    // Start do título
-    if (e.code === "Enter" && gameState === "title") {
-      gameState = "playing";
-      dialogBox.hide();
-    }
-    // Restart na vitória
-    if (e.code === "Enter" && gameState === "victory") {
-      fullRestart();
+    // Iniciar no título ou reiniciar na vitória com Enter ou Espaço
+    if (e.code === "Enter" || e.code === "Space") {
+      if (handleStartOrRestart()) {
+        e.preventDefault();
+      }
     }
   });
 
@@ -133,6 +149,15 @@ function setupInput() {
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW")
       input.jump = false;
   });
+
+  // Clique na tela / canvas para iniciar ou reiniciar
+  if (canvas) {
+    canvas.addEventListener("pointerdown", (e) => {
+      if (handleStartOrRestart()) {
+        e.preventDefault();
+      }
+    });
+  }
 
   // --- Touch / Mobile controls ---
   const btnLeft = document.getElementById("btnLeft");
@@ -147,6 +172,7 @@ function setupInput() {
     btn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       initAudio();
+      if (handleStartOrRestart()) return;
       actionOn();
     });
     btn.addEventListener("pointerup", (e) => { e.preventDefault(); actionOff(); });
@@ -315,16 +341,20 @@ function handleVictory() {
 }
 
 function fullRestart() {
+  if (audioSystem) audioSystem.init();
   // Regenerar mundo
   worldGen = new WorldGenerator();
   worldData = worldGen.generate();
   player = new Player();
   checkpointSeq = new CheckpointSequence(dialogBox);
+  hud = new HudSystem();
   activatedCheckpoints = 0;
   collectedDocsCount = 0;
   gameState = "playing";
+  if (canvas) canvas.style.cursor = "default";
   camera.x = 0;
   camera.y = 0;
+  dialogBox.show(startMessage, 3500);
 }
 
 // ============================
@@ -389,18 +419,22 @@ function render() {
   // --- Player ---
   player.render(ctx, camera);
 
-  // --- HUD ---
-  hud.render(
-    ctx,
-    player,
-    worldData.checkpointHouses.length,
-    activatedCheckpoints,
-    collectedDocsCount,
-    worldData.documents.length,
-  );
+  // --- HUD (apenas durante o jogo / morte / vitória) ---
+  if (gameState !== "title") {
+    hud.render(
+      ctx,
+      player,
+      worldData.checkpointHouses.length,
+      activatedCheckpoints,
+      collectedDocsCount,
+      worldData.documents.length,
+    );
+  }
 
-  // --- Dialog Box ---
-  dialogBox.render(ctx);
+  // --- Dialog Box (apenas quando não estiver no título para evitar sobreposição) ---
+  if (gameState !== "title") {
+    dialogBox.render(ctx);
+  }
 
   // --- Overlays ---
   if (gameState === "title") {
@@ -461,57 +495,133 @@ function renderClouds() {
 }
 
 function renderTitleOverlay() {
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  if (canvas) canvas.style.cursor = "pointer";
+
+  // Fundo escurecido semi-transparente
+  ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
   ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
+  const cardW = Math.min(CANVAS.WIDTH - 40, 520);
+  const cardH = 260;
+  const cardX = (CANVAS.WIDTH - cardW) / 2;
+  const cardY = (CANVAS.HEIGHT - cardH) / 2;
+
+  ctx.save();
+
+  // Fundo do Card
+  ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+  ctx.beginPath();
+  ctx.roundRect(cardX, cardY, cardW, cardH, 16);
+  ctx.fill();
+
+  // Borda elegante
+  ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Título Principal
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = `bold 28px "Press Start 2P", monospace`;
+  ctx.font = `bold 24px "Press Start 2P", monospace`;
   ctx.textAlign = "center";
-  ctx.fillText("PLATAFORMA 2D", CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2 - 40);
+  ctx.textBaseline = "middle";
+  ctx.fillText("PLATAFORMA 2D", CANVAS.WIDTH / 2, cardY + 48);
 
-  ctx.font = `14px "Press Start 2P", monospace`;
-  ctx.fillStyle = "#FBBF24";
-  ctx.fillText(
-    "Pressione ENTER para começar",
-    CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 20,
-  );
+  // Subtítulo
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = `10px "Press Start 2P", monospace`;
+  ctx.fillText("Aventura & Checkpoints", CANVAS.WIDTH / 2, cardY + 82);
 
-  ctx.font = "12px monospace";
-  ctx.fillStyle = "#D1D5DB";
-  ctx.fillText(
-    "← → Mover | ESPAÇO Pular",
-    CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 60,
-  );
+  // Botão pulsante central "CLIQUE OU ENTER"
+  const pulse = Math.sin(Date.now() / 250) * 0.15 + 0.85;
+  const btnW = Math.min(cardW - 60, 400);
+  const btnH = 46;
+  const btnX = (CANVAS.WIDTH - btnW) / 2;
+  const btnY = cardY + 114;
+
+  ctx.fillStyle = `rgba(16, 185, 129, ${0.2 * pulse})`;
+  ctx.beginPath();
+  ctx.roundRect(btnX, btnY, btnW, btnH, 10);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(52, 211, 153, ${0.8 * pulse})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#34D399";
+  ctx.font = `bold 11px "Press Start 2P", monospace`;
+  ctx.fillText("▶ CLIQUE OU ENTER PARA JOGAR", CANVAS.WIDTH / 2, btnY + btnH / 2 + 1);
+
+  // Dicas de controles
+  ctx.fillStyle = "#CBD5E1";
+  ctx.font = `9px "Press Start 2P", monospace`;
+  ctx.fillText("← → / A D : Mover  ·  ESPAÇO / W : Pular", CANVAS.WIDTH / 2, cardY + 195);
+
+  ctx.fillStyle = "#64748B";
+  ctx.font = `8px "Press Start 2P", monospace`;
+  ctx.fillText("Colete as certidões e alcance todos os checkpoints!", CANVAS.WIDTH / 2, cardY + 224);
+
+  ctx.restore();
 }
 
 function renderVictoryOverlay() {
+  if (canvas) canvas.style.cursor = "pointer";
   const pulse = Math.sin(Date.now() / 400) * 0.15 + 0.85;
 
-  ctx.fillStyle = `rgba(0,0,0,${0.3 * pulse})`;
+  ctx.fillStyle = `rgba(0,0,0,${0.5 * pulse})`;
   ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
+  const cardW = Math.min(CANVAS.WIDTH - 40, 520);
+  const cardH = 240;
+  const cardX = (CANVAS.WIDTH - cardW) / 2;
+  const cardY = (CANVAS.HEIGHT - cardH) / 2;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+  ctx.beginPath();
+  ctx.roundRect(cardX, cardY, cardW, cardH, 16);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
   ctx.fillStyle = "#22C55E";
-  ctx.font = `bold 28px "Press Start 2P", monospace`;
+  ctx.font = `bold 24px "Press Start 2P", monospace`;
   ctx.textAlign = "center";
-  ctx.fillText("VITÓRIA!", CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2 - 30);
+  ctx.textBaseline = "middle";
+  ctx.fillText("🎉 VITÓRIA!", CANVAS.WIDTH / 2, cardY + 48);
 
   ctx.fillStyle = "#FBBF24";
-  ctx.font = `14px "Press Start 2P", monospace`;
+  ctx.font = `11px "Press Start 2P", monospace`;
   ctx.fillText(
     victoryMessage,
     CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 10,
+    cardY + 95,
   );
 
-  ctx.fillStyle = "#D1D5DB";
-  ctx.font = `10px "Press Start 2P", monospace`;
+  const btnW = Math.min(cardW - 60, 400);
+  const btnH = 44;
+  const btnX = (CANVAS.WIDTH - btnW) / 2;
+  const btnY = cardY + 145;
+
+  ctx.fillStyle = "rgba(34, 197, 94, 0.2)";
+  ctx.beginPath();
+  ctx.roundRect(btnX, btnY, btnW, btnH, 8);
+  ctx.fill();
+
+  ctx.strokeStyle = "#22C55E";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.fillStyle = "#4ADE80";
+  ctx.font = `bold 10px "Press Start 2P", monospace`;
   ctx.fillText(
-    "ENTER para jogar novamente",
+    "▶ CLIQUE OU ENTER PARA JOGAR NOVAMENTE",
     CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 50,
+    btnY + btnH / 2 + 1,
   );
+
+  ctx.restore();
 }
 
 // ============================
