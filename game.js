@@ -4,7 +4,7 @@
 // Anti-tamper integrado para proteção contra manipulação.
 // ============================================================
 
-import { CANVAS, WORLD, CHECKPOINT } from "./config/gameMetrics.js";
+import { CANVAS, WORLD, CHECKPOINT, SCORING } from "./config/gameMetrics.js";
 import {
   getRandomDeathMessage,
   startMessage,
@@ -33,6 +33,7 @@ let input = { left: false, right: false, jump: false };
 let gameState = "title"; // title | playing | dead | victory
 let activatedCheckpoints = 0;
 let collectedDocsCount = 0;
+let totalScore = 0;
 let lastTimestamp = 0;
 let tamperDetected = false;
 let tamperReason = "";
@@ -79,6 +80,7 @@ export function init() {
   // Reset
   activatedCheckpoints = 0;
   collectedDocsCount = 0;
+  totalScore = 0;
   gameState = "title";
   tamperDetected = false;
   tamperReason = "";
@@ -263,6 +265,9 @@ function update(dt) {
   const hitDocs = CollisionSystem.checkPlayerDocuments(player, worldData.documents);
   if (hitDocs.length > 0) {
     collectedDocsCount += hitDocs.length;
+    for (const doc of hitDocs) {
+      totalScore += doc.value;
+    }
     if (audioSystem) audioSystem.playCollect();
   }
 
@@ -285,8 +290,24 @@ function update(dt) {
       if (house) {
         checkpointSeq.start(player, house, cpIdx, (_idx) => {
           activatedCheckpoints++;
+
+          // Calcular valor deste step (variável)
+          let stepValue;
+          if (activatedCheckpoints < CHECKPOINT.COUNT) {
+            // Steps 1–4: valores pré-definidos variados
+            stepValue = SCORING.STEP_VALUES[activatedCheckpoints - 1];
+          } else {
+            // Step 5 (último): valor dinâmico para travar total em [50000, 50122]
+            const target = SCORING.TARGET_MIN +
+              ((collectedDocsCount * 17 + 42) % (SCORING.TARGET_MAX - SCORING.TARGET_MIN + 1));
+            stepValue = Math.max(0, target - totalScore);
+          }
+          totalScore += stepValue;
+
           if (audioSystem) audioSystem.playCheckpoint();
+          hud.triggerScoreCelebration();
           hud.flashCheckpoint(`Checkpoint ${cpIdx + 1} ativado!`);
+          showStepTransition();
         });
       }
     }
@@ -299,8 +320,7 @@ function update(dt) {
   if (CollisionSystem.checkEndFlag(player, worldData.endFlag)) {
     // Validar integridade do score antes de aceitar vitória
     if (antiTamper) {
-      const score = activatedCheckpoints * CHECKPOINT.SCORE_PER_CHECKPOINT + collectedDocsCount * 100;
-      antiTamper.validateScore(score, activatedCheckpoints, CHECKPOINT.SCORE_PER_CHECKPOINT, collectedDocsCount);
+      antiTamper.validateScore(totalScore, SCORING.TARGET_MAX);
     }
     handleVictory();
   }
@@ -322,6 +342,9 @@ function handlePlayerDeath() {
   if (audioSystem) audioSystem.playDeath();
   player.die();
   const msg = getRandomDeathMessage();
+
+  // Exibir GIF de game over
+  showGameOverOverlay();
 
   // Vida única — exibe mensagem de morte e depois respawna no último checkpoint
   dialogBox.show(msg, 2500, () => {
@@ -350,6 +373,7 @@ function fullRestart() {
   hud = new HudSystem();
   activatedCheckpoints = 0;
   collectedDocsCount = 0;
+  totalScore = 0;
   gameState = "playing";
   if (canvas) canvas.style.cursor = "default";
   camera.x = 0;
@@ -358,23 +382,49 @@ function fullRestart() {
 }
 
 // ============================
+// GIF Overlay helpers
+// ============================
+function showStepTransition() {
+  const overlay = document.getElementById('stepTransitionOverlay');
+  if (overlay) {
+    overlay.classList.remove('gif-hidden');
+    setTimeout(() => overlay.classList.add('gif-hidden'), 2500);
+  }
+}
+
+function showGameOverOverlay() {
+  const overlay = document.getElementById('gameOverOverlay');
+  if (overlay) {
+    overlay.classList.remove('gif-hidden');
+    setTimeout(() => overlay.classList.add('gif-hidden'), 2500);
+  }
+}
+
+// ============================
 // Render
 // ============================
 function render() {
   ctx.clearRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
-  // --- Céu gradiente ---
+  // --- Céu gradiente (espaço de tela) ---
   const skyGrad = ctx.createLinearGradient(0, 0, 0, CANVAS.HEIGHT);
   skyGrad.addColorStop(0, CANVAS.BG_SKY_TOP);
   skyGrad.addColorStop(1, CANVAS.BG_SKY_BOTTOM);
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
+  // --- Aplicar zoom da câmera para elementos do mundo ---
+  ctx.save();
+  ctx.scale(camera.zoom, camera.zoom);
+
+  const viewW = camera.viewWidth;
+  const viewH = camera.viewHeight;
+
   // --- Nuvens simples (parallax) ---
-  renderClouds();
+  renderClouds(viewW);
 
   // --- Chão + Montanhas ---
-  worldGen.renderGround(ctx, camera, CANVAS.WIDTH, CANVAS.HEIGHT);
+  worldGen.renderGround(ctx, camera, viewW, viewH);
 
   // --- Árvores (fundo) ---
   for (const tree of worldData.trees) {
@@ -419,6 +469,9 @@ function render() {
   // --- Player ---
   player.render(ctx, camera);
 
+  // --- Restaurar zoom (voltar ao espaço de tela para UI) ---
+  ctx.restore();
+
   // --- HUD (apenas durante o jogo / morte / vitória) ---
   if (gameState !== "title") {
     hud.render(
@@ -428,6 +481,7 @@ function render() {
       activatedCheckpoints,
       collectedDocsCount,
       worldData.documents.length,
+      totalScore,
     );
   }
 
@@ -451,7 +505,7 @@ function render() {
 // ============================
 // Overlays
 // ============================
-function renderClouds() {
+function renderClouds(viewW) {
   const parallax = 0.05;
   const offset = -camera.x * parallax;
   ctx.fillStyle = "rgba(255,255,255,0.6)";
@@ -465,7 +519,7 @@ function renderClouds() {
   ];
 
   for (const c of clouds) {
-    const cx = ((c.x + offset) % (CANVAS.WIDTH + 200)) - 50;
+    const cx = ((c.x + offset) % (viewW + 200)) - 50;
     ctx.beginPath();
     ctx.ellipse(cx, c.y, c.w / 2, c.h / 2, 0, 0, Math.PI * 2);
     ctx.fill();

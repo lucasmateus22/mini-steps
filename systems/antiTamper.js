@@ -305,13 +305,12 @@ export default class AntiTamper {
    * @param {number} score
    * @param {number} checkpoints
    * @param {number} scorePerCheckpoint
-   * @param {number} [collectedDocs=0]
-   * @param {number} [scorePerDoc=100]
+   * @param {number} totalScore
+   * @param {number} expectedMax
    * @returns {boolean}
    */
-  validateScore(score, checkpoints, scorePerCheckpoint, collectedDocs = 0, scorePerDoc = 100) {
-    const expected = checkpoints * scorePerCheckpoint + collectedDocs * scorePerDoc;
-    if (score !== expected) {
+  validateScore(totalScore, expectedMax) {
+    if (totalScore < 0 || totalScore > expectedMax) {
       this._onTamperDetected('score_mismatch');
       return false;
     }

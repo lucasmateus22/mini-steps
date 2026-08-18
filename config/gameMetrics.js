@@ -42,8 +42,6 @@ export const PLAYER = {
 
 export const CHECKPOINT = {
   COUNT: 5, // checkpoints por fase
-  SCORE_PER_CHECKPOINT: 10000, // Cada checkpoint garante essa meta
-  MAX_SCORE: 50000, // Valor final (5 * 10000)
   // Duração de cada estado da FSM (ms)
   DOOR_OPEN_DURATION: 600,
   ENTER_DURATION: 500,
@@ -56,11 +54,24 @@ export const CHECKPOINT = {
   IMAGE_ACTIVE_SRC: "assets/checkpoint_active.png",
 };
 
+export const SCORING = {
+  // Valores variados para steps 1–4 (step 5 é dinâmico)
+  STEP_VALUES: [9400, 9650, 9850, 9600],
+  TARGET_MIN: 50000,
+  TARGET_MAX: 50122,
+  DOC_VALUE_BASE: 30,   // valor base de cada documento
+  DOC_VALUE_RANGE: 25,  // faixa de variação (30–54)
+};
+
 export const FLAG = {
   WIDTH: 40,
   HEIGHT: 60,
   START_COLOR: "#00d9ffff", // verde
   END_COLOR: "#00d9ffff", // vermelho
+};
+
+export const CAMERA = {
+  ZOOM: 1.8, // nível de zoom (mais próximo do personagem)
 };
 
 export const OBSTACLE_METRICS = {

@@ -4,7 +4,7 @@
 // Animação do painel de score ao ganhar pontos.
 // ============================================================
 
-import { HUD, CANVAS, WORLD, CHECKPOINT } from "../config/gameMetrics.js";
+import { HUD, CANVAS, WORLD } from "../config/gameMetrics.js";
 
 export default class HudSystem {
   constructor() {
@@ -184,6 +184,7 @@ export default class HudSystem {
    * @param {number} activatedCount
    * @param {number} [collectedDocs=0]
    * @param {number} [totalDocs=0]
+   * @param {number} [totalScore=0]
    */
   render(
     ctx,
@@ -192,13 +193,14 @@ export default class HudSystem {
     activatedCount,
     collectedDocs = 0,
     totalDocs = 0,
+    totalScore = 0,
   ) {
     const pad = HUD.PADDING;
 
     ctx.save();
 
     // --- Score Panel (Digital Clock) ---
-    const scoreVal = activatedCount * CHECKPOINT.SCORE_PER_CHECKPOINT;
+    const scoreVal = totalScore;
     const scoreStr = scoreVal.toString().padStart(6, "0");
 
     const clockW = 120;
@@ -207,12 +209,6 @@ export default class HudSystem {
     // Posições origin (estáticas)
     const originClockX = pad;
     const originClockY = pad;
-
-    // Detecta ganho de score e dispara animação
-    if (scoreVal > this.lastScore) {
-      this.lastScore = scoreVal;
-      this.triggerScoreCelebration();
-    }
 
     // Determinar posição do painel: animada ou fixa
     let clockX, clockY, scale;

@@ -3,6 +3,8 @@
 // Pergaminho com selo dourado de alta visibilidade e fita azul.
 // ============================================================
 
+import { SCORING } from '../config/gameMetrics.js';
+
 const papelImg = new Image();
 papelImg.src = "assets/papel.png";
 
@@ -26,6 +28,9 @@ export default class DocumentItem {
     this.floatTimer = id * 1.5; // defasagem de fase para cada papel
     this.sparkleTimer = 0;
     this.sparkles = [];
+
+    // Valor variável por documento (30–54 pontos)
+    this.value = SCORING.DOC_VALUE_BASE + ((id * 7 + 13) % SCORING.DOC_VALUE_RANGE);
   }
 
   getBounds() {
