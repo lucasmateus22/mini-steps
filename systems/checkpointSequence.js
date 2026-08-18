@@ -144,9 +144,12 @@ export default class CheckpointSequence {
       // Marcar como ativado
       this.currentHouse.activated = true;
       this._transition(State.DIALOG);
-      // Exibir mensagem
+      // Exibir mensagem com a imagem do checkpoint no topo
       const msg = getCheckpointMessage(this.checkpointIndex);
-      this.dialogBox.show(msg, CHECKPOINT.DIALOG_DURATION);
+      const stepImg = this.dialogBox.getCachedImage
+        ? (this.dialogBox.getCachedImage('stepConclude') || this.dialogBox.getCachedImage('stepTransition'))
+        : null;
+      this.dialogBox.show(msg, CHECKPOINT.DIALOG_DURATION, null, stepImg);
     }
   }
 

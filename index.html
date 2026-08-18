@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="description" content="Jogo de plataforma 2D contínuo com checkpoints interativos, cenário procedural e arquitetura modular.">
   <meta name="theme-color" content="#0F172A">
 
@@ -30,6 +30,12 @@
     <!-- Info rodapé -->
     <p id="gameInfo">← → ou A/D para mover · ESPAÇO ou W para pular · Alcance os checkpoints!</p>
 
+    <!-- Botão Fullscreen -->
+    <button id="btnFullscreen" aria-label="Alternar tela cheia">
+      <span class="fs-icon-expand">⛶</span>
+      <span class="fs-icon-compress">⛶</span>
+    </button>
+
     <!-- Controles mobile -->
     <div id="mobileControls">
       <div class="ctrl-group">
@@ -39,14 +45,6 @@
       <div class="ctrl-group">
         <button id="btnJump" class="ctrl-btn ctrl-btn-jump" aria-label="Pular">PULO</button>
       </div>
-    </div>
-
-    <!-- Overlays de feedback (GIF/Imagens) -->
-    <div id="stepTransitionOverlay" class="gif-overlay gif-hidden">
-      <img src="assets/step_transition.jpg" alt="Etapa Concluída" />
-    </div>
-    <div id="gameOverOverlay" class="gif-overlay gif-overlay-death gif-hidden">
-      <img src="assets/game_over.jpg" alt="Game Over" />
     </div>
   </div>
 

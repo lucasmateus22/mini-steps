@@ -44,8 +44,12 @@ let tamperReason = "";
 export function init() {
   canvas = document.getElementById("gameCanvas");
   ctx = canvas.getContext("2d");
-  
+
+  // --- Viewport: usar visualViewport quando disponível ---
   window.addEventListener("resize", resizeCanvas);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", resizeCanvas);
+  }
   resizeCanvas();
 
   // --- Anti-Tamper ---
@@ -66,6 +70,10 @@ export function init() {
   dialogBox = new DialogBox();
   hud = new HudSystem();
   camera = new Camera();
+
+  // --- Pré-carregar imagens para o dialog ---
+  dialogBox.preloadImage('stepConclude', 'assets/stepConclude.gif');
+  dialogBox.preloadImage('youDie', 'assets/youDie.gif');
 
   // Gerar mundo
   worldGen = new WorldGenerator();
@@ -88,6 +96,9 @@ export function init() {
   // Input
   setupInput();
 
+  // --- Fullscreen ---
+  setupFullscreen();
+
   // Start loop
   lastTimestamp = performance.now();
   requestAnimationFrame(loop);
@@ -95,10 +106,64 @@ export function init() {
 
 function resizeCanvas() {
   if (!canvas) return;
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+
+  // Preferir visualViewport para evitar problemas com barra dinâmica do browser
+  let w, h;
+  if (window.visualViewport) {
+    w = window.visualViewport.width;
+    h = window.visualViewport.height;
+  } else {
+    w = window.innerWidth;
+    h = window.innerHeight;
+  }
+
+  canvas.width = Math.round(w);
+  canvas.height = Math.round(h);
   CANVAS.WIDTH = canvas.width;
   CANVAS.HEIGHT = canvas.height;
+}
+
+// ============================
+// Fullscreen API
+// ============================
+function setupFullscreen() {
+  const btnFullscreen = document.getElementById("btnFullscreen");
+  if (!btnFullscreen) return;
+
+  btnFullscreen.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFullscreen();
+  });
+
+  // Atualizar canvas ao entrar/sair de fullscreen
+  document.addEventListener("fullscreenchange", () => {
+    // Pequeno delay para o browser ajustar dimensões
+    setTimeout(resizeCanvas, 100);
+  });
+  document.addEventListener("webkitfullscreenchange", () => {
+    setTimeout(resizeCanvas, 100);
+  });
+}
+
+function toggleFullscreen() {
+  const el = document.documentElement;
+
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    // Entrar em fullscreen
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => { });
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    }
+  } else {
+    // Sair de fullscreen
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => { });
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
 }
 
 // ============================
@@ -114,8 +179,16 @@ function startGame() {
 }
 
 // ============================
-// Input
+// Input — Multitouch com pointerId tracking
 // ============================
+
+// Map de ponteiros ativos por botão para multitouch independente
+const activePointers = {
+  left: new Set(),
+  right: new Set(),
+  jump: new Set(),
+};
+
 function setupInput() {
   const handleStartOrRestart = () => {
     if (gameState === "title") {
@@ -143,6 +216,12 @@ function setupInput() {
         e.preventDefault();
       }
     }
+
+    // F11 toggle fullscreen via teclado
+    if (e.code === "F11") {
+      e.preventDefault();
+      toggleFullscreen();
+    }
   });
 
   window.addEventListener("keyup", (e) => {
@@ -162,29 +241,67 @@ function setupInput() {
   }
 
   // --- Touch / Mobile controls ---
+  // Multitouch verdadeiro: cada botão rastreia seus próprios ponteiros
+  // via setPointerCapture, garantindo independência total entre botões
   const btnLeft = document.getElementById("btnLeft");
   const btnRight = document.getElementById("btnRight");
   const btnJump = document.getElementById("btnJump");
 
   const initAudio = () => { if (audioSystem) audioSystem.init(); };
 
-  // Usa pointer events para perfeito suporte a multitouch e mouse simultaneamente
-  const bindPointer = (btn, actionOn, actionOff) => {
+  /**
+   * Bind multitouch-safe pointer events para um botão de controle.
+   * Usa setPointerCapture para manter o tracking mesmo se o dedo deslizar.
+   * Cada botão mantém um Set de pointerIds ativos — liberar um dedo
+   * em um botão NUNCA afeta outro botão.
+   */
+  const bindMultitouch = (btn, actionKey) => {
     if (!btn) return;
+
     btn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       initAudio();
+
       if (handleStartOrRestart()) return;
-      actionOn();
+
+      // Capturar o ponteiro neste botão
+      btn.setPointerCapture(e.pointerId);
+      activePointers[actionKey].add(e.pointerId);
+      input[actionKey] = true;
     });
-    btn.addEventListener("pointerup", (e) => { e.preventDefault(); actionOff(); });
-    btn.addEventListener("pointercancel", (e) => { e.preventDefault(); actionOff(); });
-    btn.addEventListener("pointerout", (e) => { e.preventDefault(); actionOff(); });
+
+    btn.addEventListener("pointerup", (e) => {
+      e.preventDefault();
+      activePointers[actionKey].delete(e.pointerId);
+      btn.releasePointerCapture(e.pointerId);
+      // Só desativa se NENHUM ponteiro restou neste botão
+      if (activePointers[actionKey].size === 0) {
+        input[actionKey] = false;
+      }
+    });
+
+    btn.addEventListener("pointercancel", (e) => {
+      e.preventDefault();
+      activePointers[actionKey].delete(e.pointerId);
+      btn.releasePointerCapture(e.pointerId);
+      if (activePointers[actionKey].size === 0) {
+        input[actionKey] = false;
+      }
+    });
+
+    // lostpointercapture é o fallback definitivo
+    btn.addEventListener("lostpointercapture", (e) => {
+      activePointers[actionKey].delete(e.pointerId);
+      if (activePointers[actionKey].size === 0) {
+        input[actionKey] = false;
+      }
+    });
   };
 
-  bindPointer(btnLeft, () => input.left = true, () => input.left = false);
-  bindPointer(btnRight, () => input.right = true, () => input.right = false);
-  bindPointer(btnJump, () => input.jump = true, () => input.jump = false);
+  bindMultitouch(btnLeft, 'left');
+  bindMultitouch(btnRight, 'right');
+  bindMultitouch(btnJump, 'jump');
 }
 
 // ============================
@@ -307,7 +424,6 @@ function update(dt) {
           if (audioSystem) audioSystem.playCheckpoint();
           hud.triggerScoreCelebration();
           hud.flashCheckpoint(`Checkpoint ${cpIdx + 1} ativado!`);
-          showStepTransition();
         });
       }
     }
@@ -343,14 +459,14 @@ function handlePlayerDeath() {
   player.die();
   const msg = getRandomDeathMessage();
 
-  // Exibir GIF de game over
-  showGameOverOverlay();
+  // Exibir GIF de morte DENTRO do dialog (acima do texto)
+  const gameOverImg = dialogBox.getCachedImage('youDie') || dialogBox.getCachedImage('gameOver');
 
-  // Vida única — exibe mensagem de morte e depois respawna no último checkpoint
+  // Vida única — exibe mensagem de morte com GIF e depois respawna no último checkpoint
   dialogBox.show(msg, 2500, () => {
     player.respawn();
     gameState = "playing";
-  });
+  }, gameOverImg);
   gameState = "dead";
 }
 
@@ -379,25 +495,6 @@ function fullRestart() {
   camera.x = 0;
   camera.y = 0;
   dialogBox.show(startMessage, 3500);
-}
-
-// ============================
-// GIF Overlay helpers
-// ============================
-function showStepTransition() {
-  const overlay = document.getElementById('stepTransitionOverlay');
-  if (overlay) {
-    overlay.classList.remove('gif-hidden');
-    setTimeout(() => overlay.classList.add('gif-hidden'), 2500);
-  }
-}
-
-function showGameOverOverlay() {
-  const overlay = document.getElementById('gameOverOverlay');
-  if (overlay) {
-    overlay.classList.remove('gif-hidden');
-    setTimeout(() => overlay.classList.add('gif-hidden'), 2500);
-  }
 }
 
 // ============================
