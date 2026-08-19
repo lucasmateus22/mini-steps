@@ -89,8 +89,9 @@ export default class DialogBox {
    * @param {number} duration - ms
    * @param {Function} [onComplete]
    * @param {any} [media] - Mídia pré-carregada
+   * @param {boolean} [skippable=false] - Se o usuário pode pular
    */
-  show(text, duration, onComplete = null, media = null) {
+  show(text, duration, onComplete = null, media = null, skippable = false) {
     this.active = true;
     this.text = text;
     this.duration = duration;
@@ -98,6 +99,7 @@ export default class DialogBox {
     this.opacity = 0;
     this.fadeState = 'fadeIn';
     this.onComplete = onComplete;
+    this.skippable = skippable;
 
     // Resolver objeto de mídia
     this.currentMedia = media;
@@ -120,6 +122,18 @@ export default class DialogBox {
 
   hide() {
     this.fadeState = 'fadeOut';
+  }
+
+  /**
+   * Pula imediatamente o diálogo se estiver ativo e for pulável.
+   * @returns {boolean}
+   */
+  skip() {
+    if (this.active && this.skippable && this.fadeState !== 'fadeOut') {
+      this.hide();
+      return true;
+    }
+    return false;
   }
 
   update(dt) {
@@ -162,6 +176,7 @@ export default class DialogBox {
           this.fadeState = 'none';
           this.currentMedia = null;
           this.hasMedia = false;
+          this.skippable = false;
           if (this.onComplete) {
             this.onComplete();
             this.onComplete = null;
@@ -199,15 +214,50 @@ export default class DialogBox {
 
     const hasVisual = !!drawSource;
 
-    // --- Calcular dimensões responsivas ---
+    // --- Processamento de Texto e Quebra de Linha (\n + Word Wrap) ---
+    const rawText = String(this.text || '').replace(/\\n/g, '\n');
+    const isLong = rawText.length > 70;
+    const fontSize = isLong ? 11 : 13;
+    const lineHeight = fontSize + 9;
+    ctx.font = `${fontSize}px ${HUD.FONT_FAMILY}`;
+
+    const w = Math.min(DIALOG.WIDTH, CANVAS.WIDTH - 40);
+    const maxWidth = w - 44;
+
+    const paragraphs = rawText.split('\n');
+    const lines = [];
+
+    for (const paragraph of paragraphs) {
+      const trimmed = paragraph.trim();
+      if (!trimmed) {
+        lines.push('');
+        continue;
+      }
+      const words = trimmed.split(/\s+/);
+      let currentLine = '';
+
+      for (const word of words) {
+        if (!word) continue;
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+    }
+
+    const totalTextHeight = Math.max(lineHeight, lines.length * lineHeight);
     const imgDisplayH = hasVisual ? 140 : 0;
     const imgPadding = hasVisual ? 14 : 0;
-    const textAreaH = DIALOG.HEIGHT;
-
-    const w = Math.min(DIALOG.WIDTH, CANVAS.WIDTH - 32);
+    const skipPromptH = this.skippable ? 22 : 0;
+    const textAreaH = Math.max(DIALOG.HEIGHT, totalTextHeight + 30 + skipPromptH);
     const h = textAreaH + imgDisplayH + imgPadding;
     const x = (CANVAS.WIDTH - w) / 2;
-    const y = Math.max(10, CANVAS.HEIGHT / 2 - h / 2 - 20);
+    const y = Math.max(10, CANVAS.HEIGHT / 2 - h / 2 - 10);
 
     // --- Fundo ---
     ctx.fillStyle = DIALOG.BG_COLOR;
@@ -276,39 +326,32 @@ export default class DialogBox {
       textStartY = y + imgDisplayH + imgPadding;
     }
 
-    // --- Texto ---
+    // --- Renderizar Texto ---
     ctx.fillStyle = DIALOG.TEXT_COLOR;
-    ctx.font = `${HUD.FONT_SIZE + 2}px ${HUD.FONT_FAMILY}`;
+    ctx.font = `${fontSize}px ${HUD.FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Word wrap simples
-    const words = this.text.split(' ');
-    const lines = [];
-    let currentLine = '';
-    const maxWidth = w - 40;
-
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    }
-    if (currentLine) lines.push(currentLine);
-
-    const lineHeight = HUD.FONT_SIZE + 8;
-    const totalTextHeight = lines.length * lineHeight;
     const textCenterY = hasVisual
-      ? textStartY + (textAreaH - totalTextHeight) / 2 + lineHeight / 2
-      : y + (h - totalTextHeight) / 2 + lineHeight / 2;
+      ? textStartY + (textAreaH - skipPromptH - totalTextHeight) / 2 + lineHeight / 2
+      : y + (h - skipPromptH - totalTextHeight) / 2 + lineHeight / 2;
 
     lines.forEach((line, i) => {
       ctx.fillText(line, x + w / 2, textCenterY + i * lineHeight);
     });
+
+    // --- Indicador de Pular (se skippable) ---
+    if (this.skippable) {
+      const pulseAlpha = Math.sin(Date.now() / 250) * 0.3 + 0.7;
+      ctx.save();
+      ctx.globalAlpha = this.opacity * pulseAlpha;
+      ctx.fillStyle = '#FBBF24';
+      ctx.font = `9px ${HUD.FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('[ ESPAÇO / CLIQUE PARA AVANÇAR ▶ ]', x + w / 2, y + h - 10);
+      ctx.restore();
+    }
 
     ctx.restore();
   }

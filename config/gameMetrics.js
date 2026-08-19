@@ -46,7 +46,7 @@ export const CHECKPOINT = {
   DOOR_OPEN_DURATION: 600,
   ENTER_DURATION: 500,
   DOOR_CLOSE_DURATION: 400,
-  DIALOG_DURATION: 2500,
+  DIALOG_DURATION: 15000, // 15 segundos
   DOOR_REOPEN_DURATION: 600,
   EXIT_DURATION: 500,
   // Imagens do checkpoint (podem ser customizadas pelo usuário)
@@ -93,7 +93,7 @@ export const HUD = {
 };
 
 export const DIALOG = {
-  WIDTH: 500,
+  WIDTH: 680,
   HEIGHT: 100,
   FADE_DURATION: 300, // ms
   BG_COLOR: "rgba(0, 0, 0, 0.82)",

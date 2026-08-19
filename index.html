@@ -30,11 +30,18 @@
     <!-- Info rodapé -->
     <p id="gameInfo">← → ou A/D para mover · ESPAÇO ou W para pular · Alcance os checkpoints!</p>
 
-    <!-- Botão Fullscreen -->
-    <button id="btnFullscreen" aria-label="Alternar tela cheia">
-      <span class="fs-icon-expand">⛶</span>
-      <span class="fs-icon-compress">⛶</span>
-    </button>
+    <!-- Gaveta Retrátil de Fullscreen (sinalizada por seta) -->
+    <div id="fsDrawer" class="fs-drawer">
+      <button id="fsToggleBtn" class="fs-drawer-arrow" aria-label="Abrir opções de tela cheia" title="Tela cheia">
+        <span class="fs-arrow-icon">◀</span>
+      </button>
+      <div class="fs-drawer-content">
+        <button id="btnFullscreen" class="fs-action-btn" aria-label="Alternar tela cheia" title="Alternar tela cheia">
+          <span class="fs-icon-expand">⛶</span>
+          <span class="fs-icon-compress">⛶</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Controles mobile -->
     <div id="mobileControls">

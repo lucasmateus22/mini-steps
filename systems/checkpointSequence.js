@@ -136,6 +136,19 @@ export default class CheckpointSequence {
     }
   }
 
+  /**
+   * Pula o diálogo de checkpoint se estiver ativo.
+   * @returns {boolean} Se o diálogo foi pulado com sucesso.
+   */
+  skip() {
+    if (this.state === State.DIALOG) {
+      this.dialogBox.hide();
+      this._transition(State.DOOR_REOPENING);
+      return true;
+    }
+    return false;
+  }
+
   // --- Estado 3: Porta fechando ---
   _updateDoorClosing(dt) {
     const done = this.currentHouse.closeDoor(dt, 1000 / CHECKPOINT.DOOR_CLOSE_DURATION);
@@ -144,12 +157,12 @@ export default class CheckpointSequence {
       // Marcar como ativado
       this.currentHouse.activated = true;
       this._transition(State.DIALOG);
-      // Exibir mensagem com a imagem do checkpoint no topo
+      // Exibir mensagem com a imagem do checkpoint no topo e opção de pular
       const msg = getCheckpointMessage(this.checkpointIndex);
       const stepImg = this.dialogBox.getCachedImage
         ? (this.dialogBox.getCachedImage('stepConclude') || this.dialogBox.getCachedImage('stepTransition'))
         : null;
-      this.dialogBox.show(msg, CHECKPOINT.DIALOG_DURATION, null, stepImg);
+      this.dialogBox.show(msg, CHECKPOINT.DIALOG_DURATION, null, stepImg, true);
     }
   }
 

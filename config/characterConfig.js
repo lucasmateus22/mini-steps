@@ -5,15 +5,15 @@
 
 const characterConfig = {
   // --- Pele ---
-  skinColor: "#5C3A28",
-  skinHighlight: "#5C3A28",
+  skinColor: "#99512aff",
+  skinHighlight: "#99512aff",
 
   // --- Cabelo ---
   hairStyle: "bald", // careca
 
   // --- Olhos ---
   eyeColor: "#FFFFFF",
-  pupilColor: "#1A1A1A",
+  pupilColor: "#2b925eff",
 
   // --- Vestimenta ---
   vestColor: "#00d9ffff", // Colete Azul

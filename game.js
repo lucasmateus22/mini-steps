@@ -7,6 +7,7 @@
 import { CANVAS, WORLD, CHECKPOINT, SCORING } from "./config/gameMetrics.js";
 import {
   getRandomDeathMessage,
+  resetMessagePools,
   startMessage,
   victoryMessage,
 } from "./config/messages.js";
@@ -72,8 +73,8 @@ export function init() {
   camera = new Camera();
 
   // --- Pré-carregar imagens para o dialog ---
-  dialogBox.preloadImage('stepConclude', 'assets/stepConclude.gif');
-  dialogBox.preloadImage('youDie', 'assets/youDie.gif');
+  dialogBox.preloadImage("stepConclude", "assets/stepConclude.gif");
+  dialogBox.preloadImage("youDie", "assets/youDie.gif");
 
   // Gerar mundo
   worldGen = new WorldGenerator();
@@ -128,12 +129,30 @@ function resizeCanvas() {
 // ============================
 function setupFullscreen() {
   const btnFullscreen = document.getElementById("btnFullscreen");
-  if (!btnFullscreen) return;
+  const fsToggleBtn = document.getElementById("fsToggleBtn");
+  const fsDrawer = document.getElementById("fsDrawer");
 
-  btnFullscreen.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleFullscreen();
+  if (fsToggleBtn && fsDrawer) {
+    fsToggleBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fsDrawer.classList.toggle("open");
+    });
+  }
+
+  if (btnFullscreen) {
+    btnFullscreen.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+  }
+
+  // Fechar gaveta ao clicar fora
+  document.addEventListener("pointerdown", (e) => {
+    if (fsDrawer && !fsDrawer.contains(e.target)) {
+      fsDrawer.classList.remove("open");
+    }
   });
 
   // Atualizar canvas ao entrar/sair de fullscreen
@@ -152,14 +171,14 @@ function toggleFullscreen() {
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
     // Entrar em fullscreen
     if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => { });
+      el.requestFullscreen().catch(() => {});
     } else if (el.webkitRequestFullscreen) {
       el.webkitRequestFullscreen();
     }
   } else {
     // Sair de fullscreen
     if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => { });
+      document.exitFullscreen().catch(() => {});
     } else if (document.webkitExitFullscreen) {
       document.webkitExitFullscreen();
     }
@@ -174,8 +193,8 @@ function startGame() {
   if (audioSystem) audioSystem.init();
   gameState = "playing";
   if (canvas) canvas.style.cursor = "default";
-  // Exibe mensagem de boas-vindas com o jogo já ativo
-  dialogBox.show(startMessage, 3500);
+  // Exibe mensagem de boas-vindas (15s ou pulável com Espaço/Clique)
+  dialogBox.show(startMessage, 15000, null, null, true);
 }
 
 // ============================
@@ -202,7 +221,27 @@ function setupInput() {
     return false;
   };
 
+  const handleDialogSkip = () => {
+    // 1. Pular diálogo de Checkpoint
+    if (checkpointSeq && checkpointSeq.isActive) {
+      if (checkpointSeq.skip()) return true;
+    }
+    // 2. Pular qualquer diálogo ativo configurado como pulável (Game Over, Boas-vindas, etc.)
+    if (dialogBox && dialogBox.active && dialogBox.skippable) {
+      if (dialogBox.skip()) return true;
+    }
+    return false;
+  };
+
   window.addEventListener("keydown", (e) => {
+    // Pular diálogo ativo (Checkpoint ou Game Over) EXCLUSIVAMENTE via Espaço ou Enter
+    if (e.code === "Space" || e.code === "Enter") {
+      if (handleDialogSkip()) {
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (e.code === "ArrowLeft" || e.code === "KeyA") input.left = true;
     if (e.code === "ArrowRight" || e.code === "KeyD") input.right = true;
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
@@ -231,9 +270,13 @@ function setupInput() {
       input.jump = false;
   });
 
-  // Clique na tela / canvas para iniciar ou reiniciar
+  // Clique na tela / canvas para iniciar, reiniciar ou pular mensagem ativa
   if (canvas) {
     canvas.addEventListener("pointerdown", (e) => {
+      if (handleDialogSkip()) {
+        e.preventDefault();
+        return;
+      }
       if (handleStartOrRestart()) {
         e.preventDefault();
       }
@@ -247,7 +290,9 @@ function setupInput() {
   const btnRight = document.getElementById("btnRight");
   const btnJump = document.getElementById("btnJump");
 
-  const initAudio = () => { if (audioSystem) audioSystem.init(); };
+  const initAudio = () => {
+    if (audioSystem) audioSystem.init();
+  };
 
   /**
    * Bind multitouch-safe pointer events para um botão de controle.
@@ -299,9 +344,9 @@ function setupInput() {
     });
   };
 
-  bindMultitouch(btnLeft, 'left');
-  bindMultitouch(btnRight, 'right');
-  bindMultitouch(btnJump, 'jump');
+  bindMultitouch(btnLeft, "left");
+  bindMultitouch(btnRight, "right");
+  bindMultitouch(btnJump, "jump");
 }
 
 // ============================
@@ -379,7 +424,10 @@ function update(dt) {
   }
 
   // Colisão com documentos / pequenos papéis colecionáveis
-  const hitDocs = CollisionSystem.checkPlayerDocuments(player, worldData.documents);
+  const hitDocs = CollisionSystem.checkPlayerDocuments(
+    player,
+    worldData.documents,
+  );
   if (hitDocs.length > 0) {
     collectedDocsCount += hitDocs.length;
     for (const doc of hitDocs) {
@@ -415,8 +463,10 @@ function update(dt) {
             stepValue = SCORING.STEP_VALUES[activatedCheckpoints - 1];
           } else {
             // Step 5 (último): valor dinâmico para travar total em [50000, 50122]
-            const target = SCORING.TARGET_MIN +
-              ((collectedDocsCount * 17 + 42) % (SCORING.TARGET_MAX - SCORING.TARGET_MIN + 1));
+            const target =
+              SCORING.TARGET_MIN +
+              ((collectedDocsCount * 17 + 42) %
+                (SCORING.TARGET_MAX - SCORING.TARGET_MIN + 1));
             stepValue = Math.max(0, target - totalScore);
           }
           totalScore += stepValue;
@@ -460,13 +510,20 @@ function handlePlayerDeath() {
   const msg = getRandomDeathMessage();
 
   // Exibir GIF de morte DENTRO do dialog (acima do texto)
-  const gameOverImg = dialogBox.getCachedImage('youDie') || dialogBox.getCachedImage('gameOver');
+  const gameOverImg =
+    dialogBox.getCachedImage("youDie") || dialogBox.getCachedImage("gameOver");
 
-  // Vida única — exibe mensagem de morte com GIF e depois respawna no último checkpoint
-  dialogBox.show(msg, 2500, () => {
-    player.respawn();
-    gameState = "playing";
-  }, gameOverImg);
+  // Vida única — exibe mensagem de morte com GIF (15s ou até pular) e depois respawna no último checkpoint
+  dialogBox.show(
+    msg,
+    15000,
+    () => {
+      player.respawn();
+      gameState = "playing";
+    },
+    gameOverImg,
+    true,
+  );
   gameState = "dead";
 }
 
@@ -481,6 +538,7 @@ function handleVictory() {
 
 function fullRestart() {
   if (audioSystem) audioSystem.init();
+  resetMessagePools();
   // Regenerar mundo
   worldGen = new WorldGenerator();
   worldData = worldGen.generate();
@@ -494,7 +552,7 @@ function fullRestart() {
   if (canvas) canvas.style.cursor = "default";
   camera.x = 0;
   camera.y = 0;
-  dialogBox.show(startMessage, 3500);
+  dialogBox.show(startMessage, 15000, null, null, true);
 }
 
 // ============================
@@ -533,7 +591,12 @@ function render() {
   // --- Casas e Cartórios ---
   for (const house of worldData.houses) {
     if (
-      camera.isVisible(house.x - 20, house.y - 20, house.width + 40, house.height + 40)
+      camera.isVisible(
+        house.x - 20,
+        house.y - 20,
+        house.width + 40,
+        house.height + 40,
+      )
     ) {
       house.render(ctx, camera);
     }
@@ -541,7 +604,14 @@ function render() {
 
   // --- Pequenos Papéis / Certidões Colecionáveis ---
   for (const doc of worldData.documents) {
-    if (camera.isVisible(doc.x - 10, doc.y - 20, doc.width + 20, doc.height + 40)) {
+    if (
+      camera.isVisible(
+        doc.x - 60,
+        doc.y - 60,
+        doc.width + 120,
+        doc.height + 120,
+      )
+    ) {
       doc.render(ctx, camera);
     }
   }
@@ -554,9 +624,7 @@ function render() {
   }
 
   // --- Bandeiras ---
-  if (
-    camera.isVisible(worldData.startFlag.x, worldData.startFlag.y, 60, 80)
-  ) {
+  if (camera.isVisible(worldData.startFlag.x, worldData.startFlag.y, 60, 80)) {
     worldData.startFlag.render(ctx, camera);
   }
   if (camera.isVisible(worldData.endFlag.x, worldData.endFlag.y, 60, 80)) {
@@ -645,28 +713,76 @@ function renderClouds(viewW) {
   }
 }
 
+/**
+ * Desenha texto com suporte completo a quebras de linha (\n) e word wrap automático.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {number} x
+ * @param {number} centerY
+ * @param {number} lineHeight
+ * @param {number} [maxWidth]
+ * @returns {number} Altura total ocupada pelo texto
+ */
+function drawMultilineText(ctx, text, x, centerY, lineHeight, maxWidth) {
+  const rawText = String(text || "").replace(/\\n/g, "\n");
+  const paragraphs = rawText.split("\n");
+  const lines = [];
+
+  for (const paragraph of paragraphs) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) {
+      lines.push("");
+      continue;
+    }
+    const words = trimmed.split(/\s+/);
+    let currentLine = "";
+
+    for (const word of words) {
+      if (!word) continue;
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+      if (maxWidth && metrics.width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+  }
+
+  const totalHeight = lines.length * lineHeight;
+  const startY = centerY - totalHeight / 2 + lineHeight / 2;
+
+  lines.forEach((line, i) => {
+    ctx.fillText(line, x, startY + i * lineHeight);
+  });
+
+  return totalHeight;
+}
+
 function renderTitleOverlay() {
   if (canvas) canvas.style.cursor = "pointer";
 
   // Fundo escurecido semi-transparente
-  ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+  ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
   ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
-  const cardW = Math.min(CANVAS.WIDTH - 40, 520);
-  const cardH = 260;
+  const cardW = Math.min(CANVAS.WIDTH - 40, 640);
+  const cardH = 290;
   const cardX = (CANVAS.WIDTH - cardW) / 2;
   const cardY = (CANVAS.HEIGHT - cardH) / 2;
 
   ctx.save();
 
   // Fundo do Card
-  ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
   ctx.beginPath();
   ctx.roundRect(cardX, cardY, cardW, cardH, 16);
   ctx.fill();
 
   // Borda elegante
-  ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
+  ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -675,19 +791,28 @@ function renderTitleOverlay() {
   ctx.font = `bold 24px "Press Start 2P", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("PLATAFORMA 2D", CANVAS.WIDTH / 2, cardY + 48);
+  ctx.fillText("50 MIL TÍTULOS", CANVAS.WIDTH / 2, cardY + 44);
 
-  // Subtítulo
+  // Subtítulo (com quebra de linha \n)
   ctx.fillStyle = "#94A3B8";
   ctx.font = `10px "Press Start 2P", monospace`;
-  ctx.fillText("Aventura & Checkpoints", CANVAS.WIDTH / 2, cardY + 82);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  drawMultilineText(
+    ctx,
+    "A jornada da Perpart rumo aos 50 mil títulos de propriedade\nde imóveis entregues em menos de 4 anos",
+    CANVAS.WIDTH / 2,
+    cardY + 86,
+    18,
+    cardW - 48,
+  );
 
   // Botão pulsante central "CLIQUE OU ENTER"
   const pulse = Math.sin(Date.now() / 250) * 0.15 + 0.85;
-  const btnW = Math.min(cardW - 60, 400);
+  const btnW = Math.min(cardW - 60, 440);
   const btnH = 46;
   const btnX = (CANVAS.WIDTH - btnW) / 2;
-  const btnY = cardY + 114;
+  const btnY = cardY + 130;
 
   ctx.fillStyle = `rgba(16, 185, 129, ${0.2 * pulse})`;
   ctx.beginPath();
@@ -700,16 +825,28 @@ function renderTitleOverlay() {
 
   ctx.fillStyle = "#34D399";
   ctx.font = `bold 11px "Press Start 2P", monospace`;
-  ctx.fillText("▶ CLIQUE OU ENTER PARA JOGAR", CANVAS.WIDTH / 2, btnY + btnH / 2 + 1);
+  ctx.fillText(
+    "▶ CLIQUE OU ENTER PARA JOGAR",
+    CANVAS.WIDTH / 2,
+    btnY + btnH / 2 + 1,
+  );
 
   // Dicas de controles
   ctx.fillStyle = "#CBD5E1";
   ctx.font = `9px "Press Start 2P", monospace`;
-  ctx.fillText("← → / A D : Mover  ·  ESPAÇO / W : Pular", CANVAS.WIDTH / 2, cardY + 195);
+  ctx.fillText(
+    "← → / A D : Mover  ·  ESPAÇO / W : Pular",
+    CANVAS.WIDTH / 2,
+    cardY + 212,
+  );
 
   ctx.fillStyle = "#64748B";
   ctx.font = `8px "Press Start 2P", monospace`;
-  ctx.fillText("Colete as certidões e alcance todos os checkpoints!", CANVAS.WIDTH / 2, cardY + 224);
+  ctx.fillText(
+    "Colete títulos e alcance todas as etapas",
+    CANVAS.WIDTH / 2,
+    cardY + 246,
+  );
 
   ctx.restore();
 }
@@ -718,16 +855,16 @@ function renderVictoryOverlay() {
   if (canvas) canvas.style.cursor = "pointer";
   const pulse = Math.sin(Date.now() / 400) * 0.15 + 0.85;
 
-  ctx.fillStyle = `rgba(0,0,0,${0.5 * pulse})`;
+  ctx.fillStyle = `rgba(0,0,0,${0.55 * pulse})`;
   ctx.fillRect(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT);
 
-  const cardW = Math.min(CANVAS.WIDTH - 40, 520);
-  const cardH = 240;
+  const cardW = Math.min(CANVAS.WIDTH - 40, 640);
+  const cardH = 280;
   const cardX = (CANVAS.WIDTH - cardW) / 2;
   const cardY = (CANVAS.HEIGHT - cardH) / 2;
 
   ctx.save();
-  ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+  ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
   ctx.beginPath();
   ctx.roundRect(cardX, cardY, cardW, cardH, 16);
   ctx.fill();
@@ -736,28 +873,36 @@ function renderVictoryOverlay() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
+  // Título de Vitória
   ctx.fillStyle = "#22C55E";
   ctx.font = `bold 24px "Press Start 2P", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("🎉 VITÓRIA!", CANVAS.WIDTH / 2, cardY + 48);
+  ctx.fillText("🎉 VITÓRIA!", CANVAS.WIDTH / 2, cardY + 46);
 
+  // Mensagem de Vitória com suporte completo a \n e quebras
   ctx.fillStyle = "#FBBF24";
   ctx.font = `11px "Press Start 2P", monospace`;
-  ctx.fillText(
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  drawMultilineText(
+    ctx,
     victoryMessage,
     CANVAS.WIDTH / 2,
-    cardY + 95,
+    cardY + 98,
+    19,
+    cardW - 48,
   );
 
-  const btnW = Math.min(cardW - 60, 400);
-  const btnH = 44;
+  // Botão de Jogar Novamente
+  const btnW = Math.min(cardW - 60, 440);
+  const btnH = 46;
   const btnX = (CANVAS.WIDTH - btnW) / 2;
-  const btnY = cardY + 145;
+  const btnY = cardY + 158;
 
   ctx.fillStyle = "rgba(34, 197, 94, 0.2)";
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 8);
+  ctx.roundRect(btnX, btnY, btnW, btnH, 10);
   ctx.fill();
 
   ctx.strokeStyle = "#22C55E";
@@ -785,14 +930,18 @@ function renderTamperOverlay() {
   ctx.fillStyle = "#EF4444";
   ctx.font = `bold 22px "Press Start 2P", monospace`;
   ctx.textAlign = "center";
-  ctx.fillText("⚠ MANIPULAÇÃO DETECTADA", CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2 - 30);
+  ctx.fillText(
+    "⚠ MANIPULAÇÃO DETECTADA",
+    CANVAS.WIDTH / 2,
+    CANVAS.HEIGHT / 2 - 30,
+  );
 
   ctx.fillStyle = "#F87171";
   ctx.font = `12px "Press Start 2P", monospace`;
   ctx.fillText(
     "O jogo detectou uma tentativa de manipulação.",
     CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 10
+    CANVAS.HEIGHT / 2 + 10,
   );
 
   ctx.fillStyle = "#D1D5DB";
@@ -800,7 +949,7 @@ function renderTamperOverlay() {
   ctx.fillText(
     "Feche o DevTools e recarregue a página para continuar.",
     CANVAS.WIDTH / 2,
-    CANVAS.HEIGHT / 2 + 40
+    CANVAS.HEIGHT / 2 + 40,
   );
 }
 
