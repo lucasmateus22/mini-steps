@@ -108,14 +108,26 @@ export function init() {
 function resizeCanvas() {
   if (!canvas) return;
 
-  // Preferir visualViewport para evitar problemas com barra dinâmica do browser
+  const container = document.getElementById("gameContainer");
   let w, h;
-  if (window.visualViewport) {
+  if (container && container.clientWidth && container.clientHeight) {
+    w = container.clientWidth;
+    h = container.clientHeight;
+  } else if (window.visualViewport) {
     w = window.visualViewport.width;
     h = window.visualViewport.height;
   } else {
     w = window.innerWidth;
     h = window.innerHeight;
+  }
+
+  // Se estiver em modo retrato no mobile com rotação CSS de 90 graus,
+  // garantir que a largura do canvas seja o maior lado (horizontal/paisagem)
+  const isPortrait = window.innerHeight > window.innerWidth && window.innerWidth <= 900;
+  if (isPortrait && w < h) {
+    const temp = w;
+    w = h;
+    h = temp;
   }
 
   canvas.width = Math.round(w);
@@ -125,12 +137,29 @@ function resizeCanvas() {
 }
 
 // ============================
-// Fullscreen API
+// Fullscreen & Screen Orientation API
 // ============================
+async function lockLandscapeOrientation() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape");
+    } else if (screen.lockOrientation) {
+      screen.lockOrientation("landscape");
+    } else if (screen.mozLockOrientation) {
+      screen.mozLockOrientation("landscape");
+    } else if (screen.msLockOrientation) {
+      screen.msLockOrientation("landscape");
+    }
+  } catch (err) {
+    // Ignora se não for permitido sem fullscreen ou se a API não estiver disponível
+  }
+}
+
 function setupFullscreen() {
   const btnFullscreen = document.getElementById("btnFullscreen");
   const fsToggleBtn = document.getElementById("fsToggleBtn");
   const fsDrawer = document.getElementById("fsDrawer");
+  const btnForceRotate = document.getElementById("btnForceRotate");
 
   if (fsToggleBtn && fsDrawer) {
     fsToggleBtn.addEventListener("click", (e) => {
@@ -148,6 +177,16 @@ function setupFullscreen() {
     });
   }
 
+  if (btnForceRotate) {
+    btnForceRotate.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (audioSystem) audioSystem.init();
+      await toggleFullscreen();
+      await lockLandscapeOrientation();
+    });
+  }
+
   // Fechar gaveta ao clicar fora
   document.addEventListener("pointerdown", (e) => {
     if (fsDrawer && !fsDrawer.contains(e.target)) {
@@ -155,28 +194,43 @@ function setupFullscreen() {
     }
   });
 
-  // Atualizar canvas ao entrar/sair de fullscreen
-  document.addEventListener("fullscreenchange", () => {
-    // Pequeno delay para o browser ajustar dimensões
-    setTimeout(resizeCanvas, 100);
-  });
-  document.addEventListener("webkitfullscreenchange", () => {
-    setTimeout(resizeCanvas, 100);
-  });
+  // Atualizar canvas ao entrar/sair de fullscreen e mudar rotação
+  const handleResizeOrOrientation = () => {
+    setTimeout(resizeCanvas, 150);
+  };
+
+  document.addEventListener("fullscreenchange", handleResizeOrOrientation);
+  document.addEventListener(
+    "webkitfullscreenchange",
+    handleResizeOrOrientation,
+  );
+  window.addEventListener("orientationchange", handleResizeOrOrientation);
+  if (screen.orientation) {
+    screen.orientation.addEventListener("change", handleResizeOrOrientation);
+  }
 }
 
-function toggleFullscreen() {
+async function toggleFullscreen() {
   const el = document.documentElement;
 
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
     // Entrar em fullscreen
-    if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    } else if (el.webkitRequestFullscreen) {
-      el.webkitRequestFullscreen();
-    }
+    try {
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen();
+      }
+      // Tentar travar em landscape no mobile
+      await lockLandscapeOrientation();
+    } catch (e) {}
   } else {
     // Sair de fullscreen
+    try {
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+    } catch (e) {}
     if (document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     } else if (document.webkitExitFullscreen) {
@@ -193,6 +247,7 @@ function startGame() {
   if (audioSystem) audioSystem.init();
   gameState = "playing";
   if (canvas) canvas.style.cursor = "default";
+  lockLandscapeOrientation();
   // Exibe mensagem de boas-vindas (15s ou pulável com Espaço/Clique)
   dialogBox.show(startMessage, 15000, null, null, true);
 }
@@ -275,7 +330,11 @@ function setupInput() {
   if (container) {
     container.addEventListener("pointerdown", (e) => {
       // Ignorar cliques diretos nos botões de controle para não conflitar com multitouch
-      if (e.target.closest("#btnLeft, #btnRight, #btnJump, #btnFullscreen, #fsToggleBtn, #btnSkipDialog")) {
+      if (
+        e.target.closest(
+          "#btnLeft, #btnRight, #btnJump, #btnFullscreen, #fsToggleBtn, #btnSkipDialog",
+        )
+      ) {
         return;
       }
       initAudio();
@@ -384,10 +443,19 @@ function setupInput() {
 // Mobile Skip Button Visibility
 // ============================
 function isDialogSkippable() {
-  if (checkpointSeq && checkpointSeq.isActive && checkpointSeq.state === "DIALOG") {
+  if (
+    checkpointSeq &&
+    checkpointSeq.isActive &&
+    checkpointSeq.state === "DIALOG"
+  ) {
     return true;
   }
-  if (dialogBox && dialogBox.active && dialogBox.skippable && dialogBox.fadeState !== "fadeOut") {
+  if (
+    dialogBox &&
+    dialogBox.active &&
+    dialogBox.skippable &&
+    dialogBox.fadeState !== "fadeOut"
+  ) {
     return true;
   }
   return false;

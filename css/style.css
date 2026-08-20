@@ -39,6 +39,21 @@ html, body {
   touch-action: none;
 }
 
+/* --- Rotação Automática para Modo Paisagem no Mobile Retrato --- */
+@media (max-width: 900px) and (orientation: portrait) {
+  #gameContainer {
+    width: 100vh;
+    width: 100dvh;
+    height: 100vw;
+    height: 100dvw;
+    top: 0;
+    left: 100vw;
+    left: 100dvw;
+    transform: rotate(90deg);
+    transform-origin: 0 0;
+  }
+}
+
 /* --- Canvas --- */
 #gameCanvas {
   position: absolute;
