@@ -270,9 +270,15 @@ function setupInput() {
       input.jump = false;
   });
 
-  // Clique na tela / canvas para iniciar, reiniciar ou pular mensagem ativa
-  if (canvas) {
-    canvas.addEventListener("pointerdown", (e) => {
+  // Clique na tela / canvas / container para iniciar, reiniciar ou pular mensagem ativa
+  const container = document.getElementById("gameContainer");
+  if (container) {
+    container.addEventListener("pointerdown", (e) => {
+      // Ignorar cliques diretos nos botões de controle para não conflitar com multitouch
+      if (e.target.closest("#btnLeft, #btnRight, #btnJump, #btnFullscreen, #fsToggleBtn, #btnSkipDialog")) {
+        return;
+      }
+      initAudio();
       if (handleDialogSkip()) {
         e.preventDefault();
         return;
@@ -281,6 +287,31 @@ function setupInput() {
         e.preventDefault();
       }
     });
+  } else if (canvas) {
+    canvas.addEventListener("pointerdown", (e) => {
+      initAudio();
+      if (handleDialogSkip()) {
+        e.preventDefault();
+        return;
+      }
+      if (handleStartOrRestart()) {
+        e.preventDefault();
+      }
+    });
+  }
+
+  // --- Botão Mobile de Pular Diálogo ---
+  const btnSkipDialog = document.getElementById("btnSkipDialog");
+  if (btnSkipDialog) {
+    const onSkipTrigger = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      initAudio();
+      handleDialogSkip();
+    };
+
+    btnSkipDialog.addEventListener("pointerdown", onSkipTrigger);
+    btnSkipDialog.addEventListener("click", onSkipTrigger);
   }
 
   // --- Touch / Mobile controls ---
@@ -350,6 +381,29 @@ function setupInput() {
 }
 
 // ============================
+// Mobile Skip Button Visibility
+// ============================
+function isDialogSkippable() {
+  if (checkpointSeq && checkpointSeq.isActive && checkpointSeq.state === "DIALOG") {
+    return true;
+  }
+  if (dialogBox && dialogBox.active && dialogBox.skippable && dialogBox.fadeState !== "fadeOut") {
+    return true;
+  }
+  return false;
+}
+
+function updateMobileSkipButton() {
+  const btnSkipDialog = document.getElementById("btnSkipDialog");
+  if (!btnSkipDialog) return;
+  if (isDialogSkippable()) {
+    btnSkipDialog.classList.add("visible");
+  } else {
+    btnSkipDialog.classList.remove("visible");
+  }
+}
+
+// ============================
 // Game Loop
 // ============================
 function loop(timestamp) {
@@ -376,6 +430,7 @@ function update(dt) {
   // Dialog sempre atualiza
   dialogBox.update(dt);
   hud.update(dt, gameState === "playing");
+  updateMobileSkipButton();
 
   if (gameState === "title") return;
   if (gameState === "victory") return;
