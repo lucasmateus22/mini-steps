@@ -30,10 +30,10 @@ export const checkpointMessages = [
 ];
 
 export const victoryMessage =
-  "🎉 A jornada da Perpart rumo aos 50 mil títulos de propriedade de imóveis entregues em menos de 4 anos!";
+  "Com sua ajuda a Perpart conseguiu cumprir a sua jornada de 50 mil títulos de propriedade de imóveis!";
 
 export const startMessage =
-  "Com sua ajuda a Perpart conseguirá cumprir a sua jornada\nde 50 mil títulos de propriedade de imóveis!";
+  "Colete o máximo de títulos de propriedade de imóveis que conseguir!";
 
 // Pools de mensagens disponíveis (para evitar repetição)
 let availableDeathMessages = [...deathMessages];
